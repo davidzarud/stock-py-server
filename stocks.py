@@ -6,12 +6,21 @@ import logging
 import concurrent.futures
 import requests_cache 
 import pandas as pd
+import pathlib
+import textwrap
+import google.generativeai as genai
 
 app = Flask(__name__)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def to_markdown(text):
+  text = text.replace('•', '  *')
+  return Markdown(textwrap.indent(text, '> ', predicate=lambda _: True))
+  
 
 @app.route('/api/v1/stock-price', methods=['GET'])
 def get_stock_price_by_ticker():
@@ -158,7 +167,55 @@ def get_most_active_stocks():
             break
 
     return jsonify(tickers)
+
+
+@app.route('/api/v1/stock-history', methods=['GET'])
+def get_stock_history():
+    ticker = request.args.get('ticker')
+    start_date = request.args.get('startDate')
     
+    if not ticker or not start_date:
+        return jsonify({'error': 'Please provide both ticker and start_date parameters.'}), 400
+    
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(start=start_date)
+        
+        if data.empty:
+            return jsonify({'error': 'No data available for the provided parameters.'}), 404
+        
+        # Extracting required data and adding date for each day
+        stock_data = []
+        for index, row in data.iterrows():
+            stock_data.append({
+                'date': index.strftime('%Y-%m-%d'),
+                'openPrice': row['Open'],
+                'closePrice': row['Close'],
+                'highPrice': row['High'],
+                'lowPrice': row['Low'],
+                'volume': row['Volume']
+            })
+        
+        return jsonify(stock_data), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+@app.route('/api/v1/gemini', methods=['POST'])
+def getGeminiResponse():
+    
+    GOOGLE_API_KEY='AIzaSyDMUSbeGGwlL2A7IpESVD8ErqW50oFkyVM'
+    genai.configure(api_key=GOOGLE_API_KEY)
+    model = genai.GenerativeModel('gemini-pro')
+
+    prompt = request.json.get('prompt') + ' limit your response to 50 words'
+    
+    response = model.generate_content(prompt)
+    
+    return jsonify(response.text), 200
+
 
 if __name__ == '__main__':
     app.run(debug=True)

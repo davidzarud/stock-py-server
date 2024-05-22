@@ -5,6 +5,7 @@ import requests
 import logging
 import concurrent.futures
 import requests_cache 
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -138,6 +139,26 @@ def get_sp_500_stock_price():
         return jsonify(results)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-        
+
+
+@app.route('/api/v1/most-active', methods=['GET'])
+def get_most_active_stocks():
+    # URL for Yahoo Finance most active stocks screener
+    url = "https://finance.yahoo.com/most-active"
+
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Parse the HTML to get the tickers
+    tickers = []
+    for row in soup.find_all('tr', attrs={'class': 'simpTblRow'}):
+        ticker = row.find('td', attrs={'aria-label': 'Symbol'}).text
+        tickers.append(ticker)
+        if len(tickers) == 5:  # Get only top 5
+            break
+
+    return jsonify(tickers)
+    
+
 if __name__ == '__main__':
     app.run(debug=True)
